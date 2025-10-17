@@ -349,7 +349,7 @@ function TBirdSocketClient.EncodeFrame(const AMessage: String; const AOperationC
 var
   LFin, LMask: Cardinal;
   LMaskingKey: array[0..3] of Cardinal;
-  LExtendedPayloads: array[0..3] of Cardinal;
+  LExtendedPayloads: array[0..7] of Cardinal;
   LBuffer: TIdBytes;
   I: Integer;
   LXorOne, LXorTwo: Char;
@@ -380,11 +380,15 @@ begin
   else
   begin
     LMask := LMask + 127;
-    LExtendedPayloadLength := 4;
-    LExtendedPayloads[3] := Byte(Length(LMessage));
-    LExtendedPayloads[2] := Byte(Length(LMessage) shr 8);
-    LExtendedPayloads[1] := Byte(Length(LMessage) shr 16);
-    LExtendedPayloads[0] := Byte(Length(LMessage) shr 32);
+    LExtendedPayloadLength := 8;
+    LExtendedPayloads[7] := Byte(Length(LMessage) and $FF);
+    LExtendedPayloads[6] := Byte((Length(LMessage) shr 8) and $FF);
+    LExtendedPayloads[5] := Byte((Length(LMessage) shr 16) and $FF);
+    LExtendedPayloads[4] := Byte((Length(LMessage) shr 24) and $FF);
+    LExtendedPayloads[3] := Byte((Int64(Length(LMessage)) shr 32) and $FF);
+    LExtendedPayloads[2] := Byte((Int64(Length(LMessage)) shr 40) and $FF);
+    LExtendedPayloads[1] := Byte((Int64(Length(LMessage)) shr 48) and $FF);
+    LExtendedPayloads[0] := Byte((Int64(Length(LMessage)) shr 56) and $FF);
   end;
   LMaskingKey[0] := Random(255);
   LMaskingKey[1] := Random(255);
