@@ -225,13 +225,18 @@ begin
     Exit;
   FInternalLock.Enter;
   try
-    SendCloseHandshake;
+    try
+      SendCloseHandshake;
+    except
+      // Handshake falha quando a conexão já está morta (EIdConnClosedGracefully).
+      // Absorver e prosseguir com o disconnect — garantir que FConnected seja False.
+    end;
     if Assigned(FIOHandler) then
     begin
       FIOHandler.InputBuffer.Clear;
       FIOHandler.CloseGracefully;
     end;
-    Disconnect;
+    inherited Disconnect;
     if Assigned(FOnClose) then
       FOnClose(Self);
   finally
@@ -662,7 +667,10 @@ begin
   if Connected then
   begin
     try
-      Disconnect;
+      // inherited Disconnect: fecha apenas o TCP, sem destruir o ConnectionMonitor.
+      // Usar o override público (Self.Disconnect) causaria self-deadlock pois
+      // FreeConnectionMonitorThread chamaria WaitFor na própria thread do monitor.
+      inherited Disconnect;
     except
     end;
   end;
