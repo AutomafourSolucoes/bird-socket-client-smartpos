@@ -85,18 +85,16 @@ begin
 
     LStatusConnection := FOnStatusCurrentConnection;
 
-    if not terminated and not FTryingConnect and not LStatusConnection then
+    if not Terminated and not FTryingConnect and not LStatusConnection then
     begin
       FTryingConnect := True;
       try
-        TThread.Synchronize(TThread.Current,
-          procedure
-          begin
-            FOnReconnect;
-          end);
-      finally
-        FTryingConnect := False;
+        FOnReconnect; // I/O de rede — seguro em background thread; UI callback despachado via Queue no BirdSocket
+      except
+        on E: Exception do
+          ; // falha na reconexão — tenta novamente no próximo intervalo
       end;
+      FTryingConnect := False;
     end;
 
   end;

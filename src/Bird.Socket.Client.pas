@@ -179,7 +179,7 @@ end;
 
 function TBirdSocketClient.BytesToString(const ABytes: TBytes; AEncoding: TEncoding): string;
 begin
-  // Use a codifica��o padrao UTF-8
+  // Use a codifica��o padrao UTF-8
   if AEncoding = nil then
     AEncoding := TEncoding.UTF8;
   Result := AEncoding.GetString(ABytes);
@@ -310,31 +310,34 @@ end;
 
 destructor TBirdSocketClient.Destroy;
 var
-  taskArray: array of ITask;
-
+  LTaskArray: array of ITask;
 begin
   FreeConnectionMonitorThread;
 
   if FTaskReadFromWebSocket <> nil then
-    taskArray := taskArray + [FTaskReadFromWebSocket];
+    LTaskArray := LTaskArray + [FTaskReadFromWebSocket];
 
   if FTaskHeartBeat <> nil then
-    taskArray := taskArray + [FTaskHeartBeat];
+    LTaskArray := LTaskArray + [FTaskHeartBeat];
 
-  if Length(taskArray) > 0 then
-    TTask.WaitForAll(taskArray);
+  if Length(LTaskArray) > 0 then
+  begin
+    try
+      TTask.WaitForAll(LTaskArray, 5000); // timeout 5s — ReadByte pode bloquear no Android customizado
+    except
+      on E: Exception do
+        ; // EAggregateException ou timeout — tasks encerraram com I/O exception (normal ao fechar socket)
+    end;
+  end;
 
   FTaskReadFromWebSocket := nil;
-
   FTaskHeartBeat := nil;
-
-  SetLength(taskArray, 0);
+  SetLength(LTaskArray, 0);
 
   if FAutoCreateHandler and Assigned(FIOHandler) then
     FIOHandler.Free;
 
   FInternalLock.Free;
-
   FHeader.Free;
   inherited;
 end;
@@ -476,6 +479,7 @@ end;
 function TBirdSocketClient.IsValidWebSocket: Boolean;
 var
   LSpool: string;
+  LHeaderLine: string;
   LByte: Byte;
   LHeaders: TStringlist;
 begin
@@ -500,7 +504,13 @@ begin
           else
           begin
             if Assigned(FOnOpen) then
-              FOnOpen(LSpool);
+            begin
+              LHeaderLine := LSpool;
+              TThread.Queue(nil, procedure begin
+                if Assigned(FOnOpen) then
+                  FOnOpen(LHeaderLine);
+              end);
+            end;
             LHeaders.Add(LSpool.Trim);
             LSpool := EmptyStr;
           end;
@@ -640,14 +650,28 @@ begin
     end);
   if ((not Connected) or (not FUpgraded)) and (not ((LOperationCode = TOperationCode.CONNECTION_CLOSE.ToByte) or FClosingEventLocalHandshake)) then
     raise Exception.Create('Websocket not connected or timeout ' + QuotedStr(IndyTextEncoding_UTF8.GetString(LSpool)))
-  else if Assigned(OnUpgrade) then
-    OnUpgrade(Self);
+  else if Assigned(FOnUpgrade) then
+    TThread.Queue(nil, procedure begin
+      if Assigned(FOnUpgrade) then
+        FOnUpgrade(Self);
+    end);
 end;
 
 procedure TBirdSocketClient.Reconnect;
 begin
-  //Disconnect;
-  Connect;
+  if Connected then
+  begin
+    try
+      Disconnect;
+    except
+    end;
+  end;
+  try
+    Connect;
+  except
+    on E: Exception do
+      ; // falha na reconexão — ConnectionMonitor tentará no próximo intervalo
+  end;
 end;
 
 procedure TBirdSocketClient.Send(const AMessage: string);
