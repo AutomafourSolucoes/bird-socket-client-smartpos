@@ -678,11 +678,13 @@ procedure TBirdSocketClient.Send(const AMessage: string);
 begin
   if not Assigned(FSocket) or not Connected then
     Exit;
-
+  FInternalLock.Enter;
   try
-    FInternalLock.Enter;
-
-    FSocket.Write(EncodeFrame(AMessage));
+    try
+      FSocket.Write(EncodeFrame(AMessage));
+    except
+      // absorb — connection broken; ReadFromWebSocket detecta e fecha
+    end;
   finally
     FInternalLock.Leave;
   end;
